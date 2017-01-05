@@ -9,12 +9,13 @@
 #define DEBUG
 
 /* Io bound macro's */
-#define output(format, ...) printf(format, __VA_ARGS__); \
+#define output(format, ...) printf(format, ##__VA_ARGS__); \
  fflush(stdout)
 #define logmsg(format, ...) fprintf(stderr, format, ##__VA_ARGS__); \
  fflush(stderr)
 
 #define is_nill(buffer) strcmp(buffer, "NIL") == 0
+#define is_quit(buffer) strcmp(buffer, "Quit") == 0
 
 /* Init constants */
 #define BOARD_SIZE 6
@@ -174,6 +175,18 @@ unsigned char cost(char a, char b, char x, char y) {
 	}
 }
 
+unsigned char can_move_double(char a, char b, char x, char y) {
+  if (a < x) {
+		return horizontal_cost(a, b) + horizontal_cost(a+1, b) == 0;
+	} else if (b < y) {
+		return vertical_cost(a, b) + vertical_cost(a, b+1) == 0;
+	} else if (a > x) {
+		return horizontal_cost(x, y) + horizontal_cost(a-1, b) == 0;
+	} else {
+		return vertical_cost(x, y) + vertical_cost(a, b-1) == 0;
+	}
+}
+
 /* Move a tile from (a, b) to (x, y). Color is either black or white */
 void move(char a, char b, char x, char y, char color) {
 	board[a][b] = EMPTY;
@@ -199,10 +212,10 @@ void white_move() {
   for (int i = 3; i > -1; i--) {
     unsigned char x = TILES[i][0];
     unsigned char y = TILES[i][1];
-    if (in_field(x-2, y) && (!free(x-1, y)) && free(x-2, y)) {
+    if (in_field(x-2, y) && (!free(x-1, y)) && free(x-2, y) && can_move_double(x, y, x-2, y)) {
       move(x, y, x-2, y, WHITE);
       return;
-    } else if (in_field(x, y-2) && (!free(x, y-1)) && free(x, y-2)) {
+    } else if (in_field(x, y-2) && (!free(x, y-1)) && free(x, y-2) && can_move_double(x, y, x, y-2)) {
       move(x, y, x, y-2, WHITE);
       return;
     }
@@ -242,6 +255,29 @@ void white_move() {
       return;
     }
   }
+  // Allright, it turns out we cannot move any further to the left
+  // or up. Calculate the best move in another direction.
+  // Basicly, this is special code to make sure all tiles
+  // can be placed properly in the corner
+  for (int i = 3; i > -1; i--) {
+    unsigned char x = TILES[i][0];
+    unsigned char y = TILES[i][1];
+    if (x == 0 && y == 0) {   // Perfect; Don't move
+      continue;
+    } else if (x == 1 && y == 0) {
+      if (free(0, 0)) {
+        move(1, 0, 0, 0, WHITE);
+      }
+    } else if (x == 0 && y == 1) {
+      if (free(0, 0)) {
+        move(0, 1, 0, 0, WHITE);
+      }
+    } else if (x == 0 && free(x+1, y)) {
+      move(x, y, x-1, y, WHITE);
+    } else if (y == 0 && free(x, y+1)) {
+      move(x, y, x, y-1, WHITE);
+    }
+  }
 }
 
 /* Play as white */
@@ -264,6 +300,9 @@ void play_white() {
 		static char coords[4];
 		scanf("%s", buffer);
 		if (!(is_nill(buffer))) {
+      if (is_quit(buffer)) {
+        return;
+      }
 			// NOTE: Input is (y, x)
 			coords[0] = buffer[0] - 'a';
 			coords[1] = buffer[1] - '1';
@@ -290,10 +329,10 @@ void black_move() {
   for (int i = 3; i > -1; i--) {
     unsigned char x = TILES[i][0];
     unsigned char y = TILES[i][1];
-    if (in_field(x+2, y) && (!free(x+1, y)) && free(x+2, y)) {
+    if (in_field(x+2, y) && (!free(x+1, y)) && free(x+2, y) && can_move_double(x, y, x+2, y)) {
       move(x, y, x+2, y, WHITE);
       return;
-    } else if (in_field(x, y+2) && (!free(x, y+1)) && free(x, y+2)) {
+    } else if (in_field(x, y+2) && (!free(x, y+1)) && free(x, y+2) && can_move_double(x, y, x, y+2)) {
       move(x, y, x, y+2, WHITE);
       return;
     }
@@ -333,6 +372,27 @@ void black_move() {
       return;
     }
   }
+  // Basicly, this is special code to make sure all tiles
+  // can be placed properly in the corner
+  for (int i = 3; i > -1; i--) {
+    unsigned char x = TILES[i][0];
+    unsigned char y = TILES[i][1];
+    if (x == 5 && y == 5) {   // Perfect; Don't move
+      continue;
+    } else if (x == 4 && y == 5) {
+      if (free(5, 5)) {
+        move(4, 5, 5, 5, BLACK);
+      }
+    } else if (x == 5 && y == 4) {
+      if (free(5, 5)) {
+        move(5, 4, 5, 5, BLACK);
+      }
+    } else if (x == 5 && free(x-1, y)) {
+      move(x, y, x-1, y, BLACK);
+    } else if (y == 5 && free(x, y-1)) {
+      move(x, y, x, y-1, BLACK);
+    }
+  }
 }
 
 void play_black(char *first_move) {
@@ -344,6 +404,9 @@ void play_black(char *first_move) {
 	// Write white's first move
 	unsigned char coords[4];
 	if (!(is_nill(first_move))) {
+    if (is_quit(first_move)) {
+      return;
+    }
 		coords[0] = first_move[0] - 'a';
 		coords[1] = first_move[1] - '1';
 		coords[2] = first_move[2] - 'a';
@@ -363,6 +426,9 @@ void play_black(char *first_move) {
 		static char coords[4];
 		scanf("%s", buffer);
 		if (!(is_nill(buffer))) {
+      if (is_quit(buffer)) {
+        return;
+      }
 			// NOTE: Input is (y, x)
 			coords[0] = buffer[0] - 'a';
 			coords[1] = buffer[1] - '1';
